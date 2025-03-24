@@ -45,18 +45,55 @@ class Profile(db.Model):
         }
 
 
-@app.route("/api/CallExternalEndpoint", methods=["GET"])
-def call_external_endpoint():
+@app.route("/api/profile", methods=["GET"])
+def fetch_all():
     """
     # Fetch Profile from db
     """
-    profiles = Profile.query.all()
-    profiles_list = [profile.to_dict() for profile in profiles]
-    return jsonify(profiles_list)
+    try:
+        profiles = Profile.query.all()
+        profiles_list = [profile.to_dict() for profile in profiles]
+        return jsonify(profiles_list)
+    except IntegrityError as ie:
+        # Roll back the session in case of an integrity error (e.g., duplicate entry)
+        db.session.rollback()
+        return jsonify(msg=f"Operation failed: Integrity error - {ie}"), 400
+
+    except SQLAlchemyError as sa_err:
+        # Roll back the session for any other database-related exceptions
+        db.session.rollback()
+        return jsonify(msg=f"Operation failed: Database error - {sa_err}"), 500
+
+    except Exception as err:
+        # Catch any other exceptions that are not related to the database
+        return jsonify(msg=f"Operation failed: Unexpected error - {err}"), 500
 
 
-@app.route("/api/CallExternalEndpoint", methods=["POST"])
-def profile():
+@app.route("/api/profile/<int:profile_id>", methods=["GET"])
+def fetch_one(profile_id):
+    """
+    # Fetch Profile from db
+    """
+    try:
+        profiles = Profile.query.get(profile_id)
+        return jsonify(profile=profiles.to_dict())
+    except IntegrityError as ie:
+        # Roll back the session in case of an integrity error (e.g., duplicate entry)
+        db.session.rollback()
+        return jsonify(msg=f"Operation failed: Integrity error - {ie}"), 400
+
+    except SQLAlchemyError as sa_err:
+        # Roll back the session for any other database-related exceptions
+        db.session.rollback()
+        return jsonify(msg=f"Operation failed: Database error - {sa_err}"), 500
+
+    except Exception as err:
+        # Catch any other exceptions that are not related to the database
+        return jsonify(msg=f"Operation failed: Unexpected error - {err}"), 500
+
+
+@app.route("/api/profile", methods=["POST"])
+def create_profile():
     """
     # Add Profile to db
     """
@@ -77,17 +114,30 @@ def profile():
         else:
             return jsonify(msg="Operation failed"), 400
 
-    except:
-        return jsonify(msg="Operation failed"), 500
+    except IntegrityError as ie:
+        # Roll back the session in case of an integrity error (e.g., duplicate entry)
+        db.session.rollback()
+        return (
+            jsonify(msg=f"Operation failed: Integrity error - {ie._sql_message}"),
+            400,
+        )
+
+    except SQLAlchemyError as sa_err:
+        # Roll back the session for any other database-related exceptions
+        db.session.rollback()
+        return jsonify(msg=f"Operation failed: Database error - {sa_err._message}"), 500
+
+    except Exception as err:
+        # Catch any other exceptions that are not related to the database
+        return jsonify(msg=f"Operation failed: Unexpected error - {err}"), 500
 
 
-@app.route("/api/CallExternalEndpoint", methods=["PUT"])
-def update():
+@app.route("/api/profile/<int:profile_id>", methods=["PUT"])
+def update(profile_id):
     """
     # Update Profile to db
     """
     data = request.get_json()
-    profile_id = data["id"]
     age = data["age"]
     email = data["email"]
 
@@ -101,13 +151,11 @@ def update():
         return jsonify(msg="Operation failed"), 400
 
 
-@app.route("/api/CallExternalEndpoint", methods=["DELETE"])
-def erase():
+@app.route("/api/profile/<int:profile_id>", methods=["DELETE"])
+def erase(profile_id):
     """
     # Delete Profile to db
     """
-    data = request.get_json()
-    profile_id = data["id"]
     data = Profile.query.get(profile_id)
     db.session.delete(data)
     db.session.commit()
