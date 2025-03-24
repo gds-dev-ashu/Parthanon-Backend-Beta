@@ -4,55 +4,90 @@
 
 import logging
 import azure.functions as func
-import requests
 from flask import Flask, jsonify
 
+# Database configuration (replace with your actual database URI)
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError, OperationalError
+
 app = Flask(__name__)
+# Configure SQLite database
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///site.db"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False  # Avoids a warning
+
+# Create SQLAlchemy instance
+db = SQLAlchemy(app)
+
+
+class Profile(db.Model):
+    """
+    Profile model
+    """
+
+    id = db.Column(db.Integer, primary_key=True)
+    first_name = db.Column(db.String(20), unique=False, nullable=False)
+    last_name = db.Column(db.String(20), unique=False, nullable=False)
+    age = db.Column(db.Integer, nullable=False)
+
+    # repr method represents how one object of this datatable
+    # will look like
+    def __repr__(self):
+        return f"Name : {self.first_name}, Age: {self.age}"
 
 
 @app.route("/api/CallExternalEndpoint", methods=["GET"])
 def call_external_endpoint():
     """The function"""
     try:
-        # URL of the external endpoint you want to call
-        # external_url = "https://external.endpoint/sample.json"
+        profiles = Profile.query.all()
+        return jsonify(users=profiles)
+    except IntegrityError as ie:
+        # Handle exceptions related to integrity constraints, like unique constraints
+        logging.error("Integrity error occurred: %s", ie)
+        return jsonify(msg="Integrity error"), 400
 
-        # # Make a GET request to the external endpoint
-        # response = requests.get(external_url)
+    except OperationalError as oe:
+        # Handle operational errors, like issues connecting to the database
+        logging.error("Operational error occurred: %s", oe)
+        return jsonify(msg="Operational error"), 500
 
-        # # Check if the request was successful
-        # response.raise_for_status()
+    except SQLAlchemyError as sa_err:
+        # Catch-all for other SQLAlchemy-related exceptions
+        logging.error("Database error occurred: %s", sa_err)
+        return jsonify(msg="Database error"), 500
 
-        # Return the JSON response received from the external endpoint
-        return jsonify(msg="Hello world")
-    except requests.exceptions.ConnectionError as conn_err:
-        # Handle errors due to connection problems, such as DNS failure, refused connection, etc.
-        logging.error(f"Connection error occurred: {conn_err}")
-        return (
-            jsonify({"error": "Connection error occurred", "details": str(conn_err)}),
-            502,
-        )
-    except requests.exceptions.HTTPError as http_err:
-        # Handle HTTP errors that occur
-        # because of unsuccessful HTTP response codes
-        logging.error(f"HTTP error occurred: {http_err}")
-        return jsonify({"error": "HTTP error occurred", "details": str(http_err)}), 500
-    except requests.exceptions.RequestException as req_err:
-        # Handle other requests-related errors (e.g., network issues)
-        logging.error(f"Request error occurred: {req_err}")
-        return (
-            jsonify({"error": "Request error occurred", "details": str(req_err)}),
-            500,
-        )
-    except Exception as err:
-        # Handle any other exceptions
-        logging.error(f"An error occurred: {err}")
-        return jsonify({"error": "An error occurred", "details": str(err)}), 500
+
+def profile():
+    """
+    # Add Profile to db
+    """
+    first_name = "first_name"
+    last_name = "last_name"
+    age = "age"
+
+    if first_name != "" and last_name != "" and age is not None:
+        p = Profile(first_name=first_name, last_name=last_name, age=age)
+        db.session.add(p)
+        db.session.commit()
+        return jsonify(msg="Operation completed"), 200
+    else:
+        return jsonify(msg="Operation failed"), 400
+
+
+def erase():
+    """
+    # Delete Profile to db
+    """
+    data = Profile.query.get(1)
+    db.session.delete(data)
+    db.session.commit()
+    return jsonify(msg="Operation completed"), 200
 
 
 def main(req: func.HttpRequest, context: func.Context) -> func.HttpResponse:
     """
     # Delegate the request handling to Flask
     """
-    logging.debug("main  triggered")
+    with app.app_context():  # Needed for DB operations
+        db.create_all()  # Creates the database and tables
     return func.WsgiMiddleware(app.wsgi_app).handle(req, context)
