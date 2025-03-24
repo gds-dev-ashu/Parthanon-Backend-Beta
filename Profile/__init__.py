@@ -76,7 +76,10 @@ def fetch_one(profile_id):
     """
     try:
         profiles = Profile.query.get(profile_id)
-        return jsonify(profile=profiles.to_dict())
+        if profiles is not None:
+            return jsonify(profile=profiles.to_dict())
+        else:
+            return jsonify(profile="No such profile found")
     except IntegrityError as ie:
         # Roll back the session in case of an integrity error (e.g., duplicate entry)
         db.session.rollback()
@@ -143,6 +146,9 @@ def update(profile_id):
 
     if email != "" and age is not None:
         p = Profile.query.filter_by(id=profile_id).first()
+        if p is None:
+            return jsonify(profile="No such profile found")
+
         p.email = email
         p.age = age
         db.session.commit()
@@ -157,6 +163,8 @@ def erase(profile_id):
     # Delete Profile to db
     """
     data = Profile.query.get(profile_id)
+    if data is None:
+        return jsonify(profile="No such profile found")
     db.session.delete(data)
     db.session.commit()
     return jsonify(msg="Operation completed"), 200
@@ -167,6 +175,6 @@ def main(req: func.HttpRequest, context: func.Context) -> func.HttpResponse:
     # Delegate the request handling to Flask
     """
     with app.app_context():  # Needed for DB operations
-        # db.drop_all()  # Creates the database and tables
+        # db.drop_all()  # Drop the database and tables
         db.create_all()  # Creates the database and tables
     return func.WsgiMiddleware(app.wsgi_app).handle(req, context)
